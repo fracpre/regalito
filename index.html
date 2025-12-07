@@ -1,7 +1,416 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Regalito</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+            background: #000;
+            overflow: hidden; /* prevent page scrolling */
+            overscroll-behavior: none;
+        }
+        /* Video background */
+        #bg-video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0; /* make video visible behind overlay and content */
+            /* Reduce background brightness slightly */
+            filter: brightness(0.7);
+            -webkit-filter: brightness(0.7);
+            pointer-events: none;
+        }
+        /* Overlay that applies blur to the backdrop (video/GIF) without blurring content */
+        .bg-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.12); /* slight dim */
+            z-index: 1; /* above the video, below the page content */
+            pointer-events: none;
+            -webkit-backdrop-filter: blur(8px);
+            backdrop-filter: blur(8px);
+        }
+        /* Page content sits above the video */
+        .content {
+            position: relative;
+            z-index: 2;
+            color: #fff;
+            padding: 3rem 1.25rem;
+            text-align: center;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.7);
+        }
+        h1 { margin: 0 0 0.5rem 0; font-size: clamp(1.5rem, 4vw, 3rem); }
+        p { margin: 0; font-size: 1.125rem; }
+
+        /* Center the carta image */
+        .center-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 0px);
+            gap: 1rem;
+        }
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-12px); }
+            100% { transform: translateY(0px); }
+        }
+        @keyframes hue-rotate {
+            from { filter: blur(6px) hue-rotate(0deg); }
+            to   { filter: blur(6px) hue-rotate(360deg); }
+        }
+
+        .card {
+            width: min(480px, 80vw);
+            border-radius: 0;
+            overflow: visible;
+            box-shadow: none;
+            background: transparent;
+            border: none;
+            display: inline-block;
+            padding: 0;
+            will-change: transform;
+            animation: float 4s ease-in-out infinite;
+            position: relative; /* needed for aura pseudo-element */
+            z-index: 3; /* keep card above overlay */
+        }
+        .card:hover { transform: translateY(-6px); transition: transform 220ms ease; }
+        /* amorphous, seamless aura (not obviously circular) */
+        .card::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            /* inner soft blob (starts smaller for gradual reveal) */
+            width: calc(100% + 18px);
+            height: calc(100% + 14px);
+            transform: translate(-50%, -50%) scale(0.92);
+            border-radius: 30%; /* break perfect circle */
+            background:
+                radial-gradient(circle at 30% 35%, rgba(255,200,220,0.45) 0%, rgba(255,150,200,0.28) 22%, transparent 48%),
+                radial-gradient(circle at 70% 65%, rgba(200,220,255,0.28) 0%, rgba(150,180,255,0.16) 28%, transparent 56%);
+            filter: blur(20px);
+            mix-blend-mode: screen;
+            opacity: 0;
+            transition: opacity 420ms cubic-bezier(.2,.9,.3,1), transform 420ms cubic-bezier(.2,.9,.3,1);
+            pointer-events: none;
+            z-index: 2;
+        }
+        .card::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            /* outer diffuse blob (starts smaller for gradual reveal) */
+            width: calc(100% + 40px);
+            height: calc(100% + 34px);
+            transform: translate(-50%, -50%) scale(0.9);
+            border-radius: 35%;
+            background:
+                radial-gradient(circle at 40% 30%, rgba(255,180,200,0.22) 0%, rgba(255,180,200,0.12) 20%, transparent 48%),
+                radial-gradient(circle at 65% 70%, rgba(180,200,255,0.24) 0%, rgba(160,180,255,0.08) 26%, transparent 60%);
+            filter: blur(26px);
+            mix-blend-mode: screen;
+            opacity: 0;
+            transition: opacity 520ms cubic-bezier(.2,.9,.3,1), transform 520ms cubic-bezier(.2,.9,.3,1);
+            transition-delay: 70ms; /* slight stagger */
+            pointer-events: none;
+            z-index: 1;
+        }
+        .card:hover::before,
+        .card:focus::before {
+            opacity: 0.85;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        .card:hover::after,
+        .card:focus::after {
+            opacity: 0.8;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .card img {
+            display: block;
+            width: 100%;
+            height: auto;
+            position: relative;
+            z-index: 4; /* above the aura */
+        }
+        /* small tooltip above the card on hover / focus */
+        .card-tooltip {
+            position: absolute;
+            left: 50%;
+            bottom: calc(100% + 12px);
+            transform: translateX(-50%) translateY(6px);
+            background: rgba(0,0,0,0.75);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 160ms ease, transform 160ms ease;
+            white-space: nowrap;
+            z-index: 5;
+        }
+        .card-tooltip::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 100%;
+            transform: translateX(-50%) rotate(45deg);
+            width: 10px;
+            height: 10px;
+            background: rgba(0,0,0,0.75);
+        }
+        .card:hover .card-tooltip {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+        .card:focus { outline: none; }
+        /* Shake animation for the carta image */
+        @keyframes shake {
+            0% { transform: translateX(0) rotate(0deg); }
+            15% { transform: translateX(-6px) rotate(-2deg); }
+            30% { transform: translateX(6px) rotate(2deg); }
+            45% { transform: translateX(-4px) rotate(-1deg); }
+            60% { transform: translateX(4px) rotate(1deg); }
+            75% { transform: translateX(-2px) rotate(-0.5deg); }
+            100% { transform: translateX(0) rotate(0deg); }
+        }
+        .card.shaking img {
+            animation: shake 620ms ease-in-out 1;
+        }
+        /* Large message modal (restored) */
+        .big-message-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.6);
+            z-index: 10000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 240ms ease;
+        }
+        .big-message-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .big-message {
+            color: #fff;
+            background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+            padding: 2.25rem 2.5rem;
+            border-radius: 14px;
+            text-align: center;
+            box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+            transform: translateY(8px) scale(0.98);
+            transition: transform 260ms cubic-bezier(.2,.9,.3,1), opacity 260ms ease;
+            max-width: 90vw;
+        }
+        .big-message-overlay.show .big-message {
+            transform: translateY(0) scale(1);
+        }
+        .big-message h2 {
+            margin: 0 0 0.5rem 0;
+            font-size: clamp(2rem, 6vw, 4rem);
+            line-height: 1;
+        }
+        .big-message p {
+            margin: 0;
+            font-size: clamp(1rem, 2.6vw, 1.25rem);
+            opacity: 0.95;
+        }
+    </style>
+</head>
 <body>
-    <h1>¡Hola! Esta es mi página en GitHub.</h1>
-    <p>Bienvenido al proyecto Regalito.</p>
+    <!-- Video background: usa assets/background.mp4 -->
+    <video id="bg-video" autoplay muted loop playsinline preload="auto" poster="assets/background.jpg">
+        <source src="assets/background.mp4" type="video/mp4" />
+        Tu navegador no soporta video de fondo.
+    </video>
+    <div class="bg-overlay" aria-hidden="true"></div>
+
+    <main class="content" aria-label="Página principal">
+        <div class="center-wrap">
+            <div class="card" role="img" aria-label="Carta" tabindex="0">
+                <img src="assets/carta.png" alt="Carta" />
+                <span class="card-tooltip" aria-hidden="true">miniregalito jiji</span>
+            </div>
+        </div>
+    </main>
+    <!-- Big message modal (restored) -->
+    <div class="big-message-overlay" id="bigMessage" role="dialog" aria-modal="true" aria-hidden="true">
+        <canvas id="fireworksCanvas" aria-hidden="true"></canvas>
+        <div class="big-message" role="document">
+            <h2>feliz cumpleaños lyss!!!!!! :3</h2>
+            <p>como no tengo regalito prometo ir a barcelona en verano juju (aunque iba a ir igual jdisajd :3)</p>
+        </div>
+    </div>
+    <!-- Audio to play while the modal is open. File should be at assets/feliz.mp3 -->
+    <audio id="felizAudio" src="assets/feliz.mp3" preload="auto" loop aria-hidden="true"></audio>
+
+    <script>
+    (function(){
+        const card = document.querySelector('.card');
+        const overlay = document.getElementById('bigMessage');
+        const canvas = document.getElementById('fireworksCanvas');
+        const audio = document.getElementById('felizAudio');
+        const ctx = canvas.getContext && canvas.getContext('2d');
+        let fwAnim = null;
+        let fwParticles = [];
+        let fwRunning = false;
+
+        function resizeCanvas(){
+            if(!canvas) return;
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = canvas.clientWidth * dpr;
+            canvas.height = canvas.clientHeight * dpr;
+            canvas.getContext('2d').scale(dpr, dpr);
+        }
+
+        function showMessage(){
+            // immediately stop any shaking when opening the modal
+            try{ card.classList.remove('shaking'); }catch(e){}
+            overlay.classList.add('show');
+            overlay.setAttribute('aria-hidden','false');
+            overlay.querySelector('.big-message').focus?.();
+            // play audio while modal is open (user interaction: click)
+            if(audio){
+                try{ audio.currentTime = 0; audio.play().catch(()=>{}); }catch(e){}
+            }
+            startFireworks();
+        }
+        function hideMessage(){
+            overlay.classList.remove('show');
+            overlay.setAttribute('aria-hidden','true');
+            // stop audio when modal closes
+            if(audio){ try{ audio.pause(); audio.currentTime = 0; }catch(e){} }
+            stopFireworks();
+        }
+
+        // when clicking the card, give a brief shake feedback then show the message
+        card.addEventListener('click', function onCardClick(e){
+            // trigger CSS shake via class
+            try{
+                card.classList.add('shaking');
+                setTimeout(()=> card.classList.remove('shaking'), 700);
+            }catch(e){}
+            showMessage();
+        });
+
+        // Automatic periodic shake: triggers every N milliseconds when modal is closed
+        let shakeTimer = null;
+        (function startAutoShake(intervalMs = 2000){
+            try{
+                shakeTimer = setInterval(()=>{
+                    // don't shake while the modal is open; avoid overlapping shakes
+                    if(overlay.classList.contains('show')) return;
+                    if(card.classList.contains('shaking')) return;
+                    card.classList.add('shaking');
+                    setTimeout(()=> card.classList.remove('shaking'), 700);
+                }, intervalMs);
+            }catch(e){}
+        })();
+        overlay.addEventListener('click', function(e){ if(e.target === overlay) hideMessage(); });
+        document.addEventListener('keydown', function(e){ if(e.key === 'Escape') hideMessage(); });
+
+        // Prevent scrolling (mouse wheel, touchmove and common keyboard scroll keys)
+        function preventScroll(e){
+            e.preventDefault();
+        }
+        try{
+            window.addEventListener('wheel', preventScroll, { passive: false });
+            window.addEventListener('touchmove', preventScroll, { passive: false });
+            window.addEventListener('keydown', function(e){
+                const blocked = ['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '];
+                if(blocked.includes(e.key)) e.preventDefault();
+            });
+        }catch(e){
+            // older browsers may ignore options; still attach fallback listeners
+            window.addEventListener('wheel', preventScroll);
+            window.addEventListener('touchmove', preventScroll);
+        }
+
+        // Fireworks initial implementation (restored)
+        function random(min,max){ return Math.random()*(max-min)+min; }
+        function spawnFirework(){
+            if(!ctx) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = random(rect.width*0.2, rect.width*0.8);
+            const y = random(rect.height*0.15, rect.height*0.45);
+            const hue = Math.floor(random(0,360));
+            const count = Math.floor(random(16,30));
+            for(let i=0;i<count;i++){
+                const angle = Math.random()*Math.PI*2;
+                const speed = random(1,5);
+                fwParticles.push({
+                    x, y,
+                    vx: Math.cos(angle)*speed,
+                    vy: Math.sin(angle)*speed,
+                    life: random(60,120),
+                    age:0,
+                    hue,
+                    alpha:1
+                });
+            }
+        }
+
+        function renderFireworks(){
+            if(!ctx) return;
+            const rect = canvas.getBoundingClientRect();
+            ctx.clearRect(0,0,rect.width,rect.height);
+            for(let i=fwParticles.length-1;i>=0;i--){
+                const p = fwParticles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.06; // gravity
+                p.vx *= 0.99; p.vy *= 0.999;
+                p.age++;
+                p.alpha = Math.max(0, 1 - p.age / p.life);
+                ctx.beginPath();
+                ctx.fillStyle = `hsla(${p.hue},100%,60%,${p.alpha})`;
+                ctx.arc(p.x, p.y, Math.max(0.6, 2 * p.alpha), 0, Math.PI*2);
+                ctx.fill();
+                if(p.age >= p.life) fwParticles.splice(i,1);
+            }
+        }
+
+        function fwLoop(){
+            renderFireworks();
+            if(fwRunning) fwAnim = requestAnimationFrame(fwLoop);
+        }
+
+        function startFireworks(){
+            if(!canvas || !ctx || fwRunning) return;
+            fwRunning = true;
+            canvas.style.position = 'absolute';
+            canvas.style.left = '0'; canvas.style.top = '0';
+            canvas.style.width = '100%'; canvas.style.height = '100%';
+            canvas.style.zIndex = 2;
+            resizeCanvas();
+            // spawn a few bursts over 2 seconds (original behavior)
+            let bursts = 6;
+            const t = setInterval(()=>{ spawnFirework(); bursts--; if(bursts<=0) clearInterval(t); }, 300);
+            fwLoop();
+        }
+
+        function stopFireworks(){
+            fwRunning = false;
+            if(fwAnim) cancelAnimationFrame(fwAnim);
+            fwParticles = [];
+            if(ctx){ const rect = canvas.getBoundingClientRect(); ctx.clearRect(0,0,rect.width,rect.height); }
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+    })();
+    </script>
 </body>
 </html>
